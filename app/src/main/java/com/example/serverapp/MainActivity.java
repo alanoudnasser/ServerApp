@@ -1,14 +1,13 @@
 package com.example.serverapp;
-
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
+
+
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -22,9 +21,7 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
@@ -36,6 +33,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Handler handler;
     private int greenColor;
     private EditText edMessage;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -70,8 +68,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onClick(View view) {
-        Toast.makeText(MainActivity.this, "clicked", Toast.LENGTH_SHORT).show();
-
         if (view.getId() == R.id.start_server) {
             msgList.removeAllViews();
             showMessage("Server Started.", Color.BLACK);
@@ -89,10 +85,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private void sendMessage(final String message) {
         try {
             if (null != tempClientSocket) {
-                PrintWriter out = new PrintWriter(new BufferedWriter(
-                        new OutputStreamWriter(tempClientSocket.getOutputStream())), true);
-                out.println(message);
-                Log.d("Server", "Message sent: " + message); // Add this line for logging
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        PrintWriter out = null;
+                        try {
+                            out = new PrintWriter(new BufferedWriter(
+                                    new OutputStreamWriter(tempClientSocket.getOutputStream())),
+                                    true);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        out.println(message);
+                    }
+                }).start();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -108,7 +114,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 findViewById(R.id.start_server).setVisibility(View.GONE);
             } catch (IOException e) {
                 e.printStackTrace();
-                Toast.makeText(MainActivity.this, "Error Starting Server: ", Toast.LENGTH_SHORT).show();
+                showMessage("Error Starting Server : " + e.getMessage(), Color.RED);
             }
             if (null != serverSocket) {
                 while (!Thread.currentThread().isInterrupted()) {
@@ -118,20 +124,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         new Thread(commThread).start();
                     } catch (IOException e) {
                         e.printStackTrace();
-                        Toast.makeText(MainActivity.this, "Error Communicating to Client :  ", Toast.LENGTH_SHORT).show();
-
                         showMessage("Error Communicating to Client :" + e.getMessage(), Color.RED);
                     }
                 }
             }
         }
     }
-    private List<CommunicationThread> communicationThreads = new ArrayList<>();
 
     class CommunicationThread implements Runnable {
 
         private Socket clientSocket;
-        private PrintWriter output;
+
         private BufferedReader input;
 
         public CommunicationThread(Socket clientSocket) {
@@ -139,7 +142,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             tempClientSocket = clientSocket;
             try {
                 this.input = new BufferedReader(new InputStreamReader(this.clientSocket.getInputStream()));
-                this.output = new PrintWriter(clientSocket.getOutputStream(), true);
             } catch (IOException e) {
                 e.printStackTrace();
                 showMessage("Error Connecting to Client!!", Color.RED);
@@ -158,26 +160,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         showMessage("Client : " + read, greenColor);
                         break;
                     }
-
                     showMessage("Client : " + read, greenColor);
-
-                    // Forward the received message to all connected clients
-                    forwardMessage(read);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
             }
-        }
-
-        private void forwardMessage(String message) {
-            for (CommunicationThread thread : communicationThreads) {
-                thread.sendMessage(message);
-            }
-        }
-        private void sendMessage(String message) {
-            output.println(message);
-            output.flush();
         }
 
     }
