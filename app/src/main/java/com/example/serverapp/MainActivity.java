@@ -4,6 +4,8 @@ import android.os.Bundle;
 import android.os.Handler;
 
 
+import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -20,8 +22,12 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.PublicKey;
+import java.security.cert.X509Certificate;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import javax.crypto.Cipher;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
@@ -33,6 +39,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Handler handler;
     private int greenColor;
     private EditText edMessage;
+    String msg;
+    String dec;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,6 +51,53 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         handler = new Handler();
         msgList = findViewById(R.id.msgList);
         edMessage = findViewById(R.id.edMessage);
+        msg = "Hello";
+        try {
+            // Generate certificate and keys only once
+            AsymmetricEncryptionUtils.generateCertificateAndKeys(getApplicationContext());
+
+            // Get the public key and certificate
+            PublicKey publicKey = AsymmetricEncryptionUtils.getPublicKey();
+            X509Certificate certificate = AsymmetricEncryptionUtils.getCertificate();
+
+            if (publicKey != null && certificate != null) {
+                // Log the public key in Base64 encoding
+                //byte[] publicKeyBytes = publicKey.getEncoded();
+                //String base64PublicKey = Base64.encodeToString(publicKeyBytes, Base64.DEFAULT);
+                Log.d("PublicKey", "Public Key : " + publicKey.toString());
+
+                // Base64 encoded encrypted message
+                //String base64EncryptedMessage = "h6gmRV5IDfqK4a+eVgHSp1Sl3QRjH20j8QQnkTvgqUdjJ3fQNOw6d20GI/CS3HZjGriUbt16rPu/33iKKiV9XQ==";
+
+                // Decode the base64-encoded string to get the encrypted message bytes
+              //  byte[] encryptedMessage = Base64.decode(base64EncryptedMessage, Base64.DEFAULT);
+
+                // Initialize the Cipher object for decryption
+                //Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+               // cipher.init(Cipher.DECRYPT_MODE, AsymmetricEncryptionUtils.getPrivateKey());
+
+                // Decrypt the ciphertext
+               // byte[] decryptedBytes = cipher.doFinal(encryptedMessage);
+
+                // Convert decrypted bytes to a String
+              //  String decryptedMessage = new String(decryptedBytes, "UTF8");
+                //Log.d("DecryptedMessage", decryptedMessage);
+                if (AsymmetricEncryptionUtils.verifyDigitalSignature(certificate, publicKey)) {
+                    Log.d("Demo3", "Digital Signature Verified");
+                    // Step 12: Print the certificate
+                    String certificateString = certificate.toString();
+                    Log.d("Demo3", "Certificate:\n" + certificateString);
+                } else {
+                    Log.d("Demo3", "Digital Signature Verification Failed");
+                }
+
+            } else {
+                Log.e("Demo3", "Failed to obtain public key or certificate");
+            }
+
+        } catch (Exception e) {
+            Log.e("Exception", "Error occurred", e);
+        }
     }
 
     public TextView textView(String message, int color) {
@@ -150,25 +205,46 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
 
         public void run() {
-
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    String read = input.readLine();
-                    if (null == read || "Disconnect".contentEquals(read)) {
-                        Thread.interrupted();
-                        read = "Client Disconnected";
-                        showMessage("Client : " + read, greenColor);
-                        break;
+                    StringBuilder messageBuilder = new StringBuilder();
+                    String line;
+                    // Check if there is more data to read
+                    while (input.ready()) {
+                        line = input.readLine();
+                        if (line == null || "Disconnect".equals(line)) {
+                            // If the line is null or 'Disconnect', handle disconnection
+                            Thread.currentThread().interrupt();
+                            messageBuilder.append("Client Disconnected");
+                            showMessage("Client : Client Disconnected", greenColor);
+                            break;
+                        }
+                        messageBuilder.append(line).append("\n");
                     }
-                    showMessage("Client : " + read, greenColor);
+
+                    // Check if we built a message to process
+                    String read = messageBuilder.toString();
+                    if (!read.isEmpty()) {
+                        showMessage("Client : " + read, greenColor);
+                        Log.e("Demo6", read);
+                        dec(read);
+                    }
+
+                    // Add a small delay to allow for data to accumulate
+                    try {
+                        Thread.sleep(100); // Sleep for a short time (e.g., 100 ms)
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt(); // Restore the interrupted status
+                    }
+
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-
             }
         }
+        }
 
-    }
+
 
     String getTime() {
         SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
@@ -182,6 +258,27 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             sendMessage("Disconnect");
             serverThread.interrupt();
             serverThread = null;
+        }
+    }
+    private void dec(String msg){
+        try{
+            byte[] encryptedMessage = Base64.decode(msg, Base64.DEFAULT);
+
+            // Initialize the Cipher object for decryption
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            cipher.init(Cipher.DECRYPT_MODE, AsymmetricEncryptionUtils.getPrivateKey());
+
+            // Decrypt the ciphertext
+            byte[] decryptedBytes = cipher.doFinal(encryptedMessage);
+
+            // Convert decrypted bytes to a String
+            String decryptedMessage = new String(decryptedBytes, "UTF8");
+            Log.e("Demo7", decryptedMessage);
+
+        }
+
+        catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }
